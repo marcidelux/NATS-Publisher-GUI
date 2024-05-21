@@ -17,6 +17,8 @@ This is a simple PyQt6 application for publishing messages to a NATS server. The
 
 ### Step-by-Step Installation
 ```
+0. You can run the installer.sh
+
 1. Clone the repository:
    git clone https://github.com/marcidelux/NATS-Publisher-GUI.git
    cd nats-publisher-gui
@@ -36,6 +38,11 @@ channels:
   - "channel1"
 messages:
   - '{"type": "greeting", "message": "hello"}'
+
 ```
 ### Start the software:
 `python main.py`
+
+### Case of error:
+1. ImportError: libGL.so.1: cannot open shared object file: No such file or directory
+   - `sudo apt-get update && sudo apt-get install -y libgl1-mesa-glx`

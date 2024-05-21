@@ -36,3 +36,6 @@ channels:
   - "channel1"
 messages:
   - '{"type": "greeting", "message": "hello"}'
+```
+### Start the software:
+`python main.py`

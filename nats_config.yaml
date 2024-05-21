@@ -1,0 +1,6 @@
+channels:
+- channel1
+hosts:
+- nats://localhost:4222
+messages:
+- '{"type": "greeting", "message": "hello"}'

@@ -42,7 +42,3 @@ messages:
 ```
 ### Start the software:
 `python main.py`
-
-### Case of error:
-1. ImportError: libGL.so.1: cannot open shared object file: No such file or directory
-   - `sudo apt-get update && sudo apt-get install -y libgl1-mesa-glx`

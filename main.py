@@ -3,6 +3,8 @@ import asyncio
 import yaml
 import os
 import paramiko
+import json
+import datetime
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton, QMessageBox, QFileDialog, QTextEdit)
 
 CONFIG_FILE = 'nats_config.yaml'
@@ -64,6 +66,7 @@ class NATSClient(QWidget):
 
         self.log_area = QTextEdit()
         self.log_area.setReadOnly(True)
+        self.log_area.setStyleSheet("background-color: lightgrey;")
         self.layout.addWidget(self.log_area)
 
         self.setLayout(self.layout)
@@ -170,6 +173,12 @@ class NATSClient(QWidget):
             self.ssh_client = None
             QMessageBox.critical(self, 'Error', f'Failed to establish SSH connection: {e}')
 
+    def add_timestamp_to_message(self, message):
+        message_dict = json.loads(message)
+        current_time = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+        message_dict['ts'] = current_time
+        return json.dumps(message_dict)
+
     def send_message(self):
         server = self.server_combo.currentText()
         topic = self.topic_combo.currentText()
@@ -207,7 +216,8 @@ class NATSClient(QWidget):
             if not nats_path:
                 nats_path = self.nats_path
 
-            escaped_json_message = message.replace('"', '\\"')
+            message_with_timestamp = self.add_timestamp_to_message(message)
+            escaped_json_message = message_with_timestamp.replace('"', '\\"')
             command = f'/bin/bash -c \'{nats_path} pub {topic} "{escaped_json_message}" -s {server}\''
             stdin, stdout, stderr = self.ssh_client.exec_command(command)
             stdout.channel.recv_exit_status()
@@ -215,7 +225,7 @@ class NATSClient(QWidget):
             error = stderr.read().decode()
 
             self.log_command(f'topic: {topic}')
-            self.log_command(f'message: {message}')
+            self.log_command(f'message: {message_with_timestamp}')
             if response:
                 self.log_response(f'Response: {response}')
             if error and "Published" not in error:

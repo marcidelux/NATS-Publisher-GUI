@@ -45,3 +45,8 @@ messages:
 ```
 ### Start the software:
 `python main.py`
+Or run the executeable.
+
+### Setup NATS path.
+Depending on the installation of the NATS on the target machine check its executeable PATH.  
+On the target machine: `which nats`, copy the response and paste it to the nats_config.yaml/nats_path.

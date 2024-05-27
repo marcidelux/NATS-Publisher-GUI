@@ -5,10 +5,13 @@ This is a simple PyQt6 application for publishing messages to a NATS server. The
 ## Features
 
 - Select NATS server address from a dropdown menu.
-- Select or add new channels and messages from dropdown menus.
+- Select or add new topics and messages from dropdown menus.
 - Send messages to the specified channel on the selected NATS server.
+- Load configuration file.
+- Send message over SSH connection.
 
 ## Installation
+If you are on windows machine, than download the NatsPublisher_V_V.exe from executeable/ folder.
 
 ### Prerequisites
 
@@ -34,8 +37,8 @@ pip install -r requirements.txt
 If it was not created a default file will be created at first startup:
 hosts:
   - "nats://localhost:4222"
-channels:
-  - "channel1"
+topic:
+  - "topic1"
 messages:
   - '{"type": "greeting", "message": "hello"}'
 

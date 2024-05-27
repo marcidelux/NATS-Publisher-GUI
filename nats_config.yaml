@@ -1,6 +1,9 @@
-channels:
-- channel1
 hosts:
-- nats://localhost:4222
+- nats://localhost:8222
 messages:
 - '{"type": "greeting", "message": "hello"}'
+nats_path: /usr/bin
+ssh_address: 127.0.0.1
+ssh_username: vagrant
+topics:
+- topic1

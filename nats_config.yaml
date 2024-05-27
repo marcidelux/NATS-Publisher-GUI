@@ -1,3 +1,4 @@
+get_nats_ip_command: docker inspect nats | jq -r '.[0].NetworkSettings.Ports."4222/tcp"[0].HostIp'
 hosts:
 - nats://localhost:8222
 messages:

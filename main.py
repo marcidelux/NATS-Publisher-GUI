@@ -3,9 +3,9 @@ import asyncio
 import yaml
 import os
 import paramiko
-import json
+from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton, QMessageBox, QFileDialog, QTextEdit, QHBoxLayout, QInputDialog)
 import datetime
-from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton, QMessageBox, QFileDialog, QTextEdit)
+import json
 
 CONFIG_FILE = 'nats_config.yaml'
 nats_path = ""
@@ -15,7 +15,7 @@ class NATSClient(QWidget):
         super().__init__()
 
         self.setWindowTitle('NATS Publisher')
-        self.setGeometry(100, 100, 600, 800)
+        self.setGeometry(100, 100, 500, 450)
 
         self.ssh_client = None
 
@@ -45,20 +45,39 @@ class NATSClient(QWidget):
         self.connect_button.clicked.connect(self.connect_ssh)
         self.layout.addWidget(self.connect_button)
 
+        self.get_nats_ip_button = QPushButton('Get NATS IP')
+        self.get_nats_ip_button.clicked.connect(self.get_nats_ip)
+        self.layout.addWidget(self.get_nats_ip_button)
+
         self.server_label = QLabel('NATS Server Address:')
+        self.server_combo_layout = QHBoxLayout()
         self.server_combo = QComboBox()
+        self.add_new_host_button = QPushButton('Add New')
+        self.add_new_host_button.clicked.connect(self.check_add_new_host)
+        self.server_combo_layout.addWidget(self.server_combo)
+        self.server_combo_layout.addWidget(self.add_new_host_button)
         self.layout.addWidget(self.server_label)
-        self.layout.addWidget(self.server_combo)
+        self.layout.addLayout(self.server_combo_layout)
 
         self.topic_label = QLabel('Topic:')
+        self.topic_combo_layout = QHBoxLayout()
         self.topic_combo = QComboBox()
+        self.add_new_topic_button = QPushButton('Add New')
+        self.add_new_topic_button.clicked.connect(self.check_add_new_topic)
+        self.topic_combo_layout.addWidget(self.topic_combo)
+        self.topic_combo_layout.addWidget(self.add_new_topic_button)
         self.layout.addWidget(self.topic_label)
-        self.layout.addWidget(self.topic_combo)
+        self.layout.addLayout(self.topic_combo_layout)
 
         self.message_label = QLabel('Message:')
+        self.message_combo_layout = QHBoxLayout()
         self.message_combo = QComboBox()
+        self.add_new_message_button = QPushButton('Add New')
+        self.add_new_message_button.clicked.connect(self.check_add_new_message)
+        self.message_combo_layout.addWidget(self.message_combo)
+        self.message_combo_layout.addWidget(self.add_new_message_button)
         self.layout.addWidget(self.message_label)
-        self.layout.addWidget(self.message_combo)
+        self.layout.addLayout(self.message_combo_layout)
 
         self.send_button = QPushButton('Send')
         self.send_button.clicked.connect(self.send_message)
@@ -85,7 +104,8 @@ class NATSClient(QWidget):
             ],
             'ssh_address': '127.0.0.1',
             'ssh_username': 'vagrant',
-            'nats_path': '/usr/bin'
+            'nats_path': '/usr/bin',
+            'get_nats_ip_command': 'docker inspect nats | jq -r \'.[0].NetworkSettings.Ports."4222/tcp"[0].HostIp\''
         }
         with open(CONFIG_FILE, 'w') as file:
             yaml.dump(default_config, file)
@@ -106,53 +126,48 @@ class NATSClient(QWidget):
             self.ssh_address = config.get('ssh_address', '')
             self.ssh_username = config.get('ssh_username', '')
             self.nats_path = config.get('nats_path', '/usr/bin')
+            self.get_nats_ip_command = config.get('get_nats_ip_command', 'docker inspect nats | jq -r \'.[0].NetworkSettings.Ports."4222/tcp"[0].HostIp\'')
 
         self.server_combo.clear()
-        self.server_combo.addItems(self.hosts + ["Add New"])
+        self.server_combo.addItems(self.hosts)
         self.topic_combo.clear()
-        self.topic_combo.addItems(self.topics + ["Add New"])
+        self.topic_combo.addItems(self.topics)
         self.message_combo.clear()
-        self.message_combo.addItems(self.messages + ["Add New"])
+        self.message_combo.addItems(self.messages)
         self.ssh_input.setText(self.ssh_address)
         self.ssh_user_input.setText(self.ssh_username)
 
     def save_config(self):
         with open(self.config_file, 'w') as file:
             yaml.dump({
-                'hosts': self.hosts,
                 'topics': self.topics,
                 'messages': self.messages,
                 'ssh_address': self.ssh_address,
                 'ssh_username': self.ssh_username,
                 'nats_path': self.nats_path,
+                'get_nats_ip_command': self.get_nats_ip_command,
             }, file)
 
     def check_add_new_host(self):
-        if self.server_combo.currentText() == "Add New":
-            new_host, ok = QInputDialog.getText(self, 'Add New Host', 'Enter new host name:')
-            if ok and new_host:
-                self.hosts.append(new_host)
-                self.server_combo.insertItem(self.server_combo.count() - 1, new_host)
-                self.server_combo.setCurrentText(new_host)
-                self.save_config()
+        new_host, ok = QInputDialog.getText(self, 'Add New Host', 'Enter new host name:')
+        if ok and new_host:
+            self.hosts.append(new_host)
+            self.server_combo.addItem(new_host)
+            self.save_config()
 
     def check_add_new_topic(self):
-        if self.topic_combo.currentText() == "Add New":
-            new_topic, ok = QInputDialog.getText(self, 'Add New Topic', 'Enter new topic name:')
-            if ok and new_topic:
-                self.topics.append(new_topic)
-                self.topic_combo.insertItem(self.topic_combo.count() - 1, new_topic)
-                self.topic_combo.setCurrentText(new_topic)
-                self.save_config()
+        new_topic, ok = QInputDialog.getText(self, 'Add New Topic', 'Enter new topic name:')
+        if ok and new_topic:
+            self.topics.append(new_topic)
+            self.topic_combo.addItem(new_topic)
+            self.save_config()
 
     def check_add_new_message(self):
-        if self.message_combo.currentText() == "Add New":
-            new_message, ok = QInputDialog.getText(self, 'Add New Message', 'Enter new message:')
-            if ok and new_message:
-                self.messages.append(new_message)
-                self.message_combo.insertItem(self.message_combo.count() - 1, new_message)
-                self.message_combo.setCurrentText(new_message)
-                self.save_config()
+        new_message, ok = QInputDialog.getText(self, 'Add New Message', 'Enter new message:')
+        if ok and new_message:
+            self.messages.append(new_message)
+            self.message_combo.addItem(new_message)
+            self.save_config()
 
     def connect_ssh(self):
         ssh_address = self.ssh_input.text()
@@ -168,16 +183,10 @@ class NATSClient(QWidget):
 
         try:
             self.ssh_client.connect(ssh_address, port=22, username=ssh_username, password=ssh_password)
-            self.log_info("SSH connection established successfully!")
+            self.log_info('SSH connection established successfully!')
         except Exception as e:
             self.ssh_client = None
             QMessageBox.critical(self, 'Error', f'Failed to establish SSH connection: {e}')
-
-    def add_timestamp_to_message(self, message):
-        message_dict = json.loads(message)
-        current_time = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
-        message_dict['ts'] = current_time
-        return json.dumps(message_dict)
 
     def send_message(self):
         server = self.server_combo.currentText()
@@ -193,10 +202,6 @@ class NATSClient(QWidget):
         else:
             asyncio.run(self.publish_message_local(server, topic, message))
 
-    def log_command(self, message):
-        self.log_area.append(f'<span style="color: #7940b3;">{message}</span>')
-        self.log_area.verticalScrollBar().setValue(self.log_area.verticalScrollBar().maximum())
-
     def log_response(self, message):
         self.log_area.append(f'<span style="color: blue;">{message}</span>')
         self.log_area.verticalScrollBar().setValue(self.log_area.verticalScrollBar().maximum())
@@ -209,6 +214,37 @@ class NATSClient(QWidget):
         self.log_area.append(f'<span style="color: green;">{message}</span>')
         self.log_area.verticalScrollBar().setValue(self.log_area.verticalScrollBar().maximum())
 
+    def add_timestamp_to_message(self, message):
+        message_dict = json.loads(message)
+        current_time = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+        message_dict['ts'] = current_time
+        return json.dumps(message_dict)
+
+    def get_nats_ip(self):
+        if self.ssh_client:
+            try:
+                command = self.get_nats_ip_command
+                stdin, stdout, stderr = self.ssh_client.exec_command(command)
+                stdout.channel.recv_exit_status()
+                response = stdout.read().decode().strip()
+                error = stderr.read().decode().strip()
+
+                self.log_info(f'Command: {command}')
+                if error:
+                    self.log_error(f'Error: {error}')
+                    QMessageBox.critical(self, 'Error', f'Failed to get NATS IP: {error}')
+                else:
+                    self.log_response(f'NATS IP: {response}')
+                    if response and response not in self.hosts:
+                        self.hosts.append(response)
+                        self.server_combo.addItem(response)
+                        self.save_config()
+
+            except Exception as e:
+                self.log_error(f'Exception: {e}')
+                QMessageBox.critical(self, 'Error', f'Failed to get NATS IP: {e}')
+        else:
+            QMessageBox.warning(self, 'SSH Error', 'SSH connection not established.')
 
     async def publish_message_ssh(self, server, topic, message):
         global nats_path
@@ -219,28 +255,28 @@ class NATSClient(QWidget):
             message_with_timestamp = self.add_timestamp_to_message(message)
             escaped_json_message = message_with_timestamp.replace('"', '\\"')
             command = f'/bin/bash -c \'{nats_path} pub {topic} "{escaped_json_message}" -s {server}\''
-            stdin, stdout, stderr = self.ssh_client.exec_command(command)
+            _, stdout, stderr = self.ssh_client.exec_command(command)
             stdout.channel.recv_exit_status()
             response = stdout.read().decode()
             error = stderr.read().decode()
 
-            self.log_command(f'topic: {topic}')
-            self.log_command(f'message: {message_with_timestamp}')
-            if response:
-                self.log_response(f'Response: {response}')
+            self.log_info(f'Command: {command}')
             if error and "Published" not in error:
                 self.log_error(f'Error: {error}')
                 QMessageBox.critical(self, 'Error', f'Failed to send message: {error}')
             else:
                 self.log_response(f'Response: {error}')
+            if response:
+                self.log_response(f'Response: {response}')
 
         except Exception as e:
             self.log_error(f'Exception: {e}')
             QMessageBox.critical(self, 'Error', f'Failed to send message: {e}')
 
     async def publish_message_local(self, server, topic, message):
-        command = f'nats pub {topic} "{message}" -s {server}'
-        self.log_command(f'Command: {command}')
+        message_with_timestamp = self.add_timestamp_to_message(message)
+        command = f'nats pub {topic} "{message_with_timestamp}" -s {server}'
+        self.log_info(f'Command: {command}')
         process = await asyncio.create_subprocess_shell(
             command,
             stdout=asyncio.subprocess.PIPE,

@@ -6,9 +6,15 @@ import paramiko
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton, QMessageBox, QFileDialog, QTextEdit, QHBoxLayout, QInputDialog)
 import datetime
 import json
+from collections import OrderedDict
 
 CONFIG_FILE = 'nats_config.yaml'
 nats_path = ""
+
+def represent_ordereddict(dumper, data):
+    return dumper.represent_mapping(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, data.items())
+
+yaml.add_representer(OrderedDict, represent_ordereddict)
 
 class NATSClient(QWidget):
     def __init__(self):
@@ -96,19 +102,19 @@ class NATSClient(QWidget):
         self.load_config()  # Load the initial config
 
     def create_default_config(self):
-        default_config = {
-            'hosts': ["nats://localhost:8222"],
-            'topics': ["topic1"],
-            'messages': [
-                '{"type": "greeting", "message": "hello"}'
-            ],
-            'ssh_address': '127.0.0.1',
-            'ssh_username': 'vagrant',
-            'nats_path': '/usr/bin',
-            'get_nats_ip_command': 'docker inspect nats | jq -r \'.[0].NetworkSettings.Ports."4222/tcp"[0].HostIp\''
-        }
+        default_config = OrderedDict()
+        default_config['ssh_address'] = '127.0.0.1'
+        default_config['ssh_username'] = 'vagrant'
+        default_config['nats_path'] = '/usr/bin'
+        default_config['get_nats_ip_command'] = 'docker inspect nats | jq -r \'.[0].NetworkSettings.Ports."4222/tcp"[0].HostIp\''
+        default_config['hosts'] = ["nats://localhost:8222"]
+        default_config['topics'] = ["topic1"]
+        default_config['messages'] = [
+                '{"message_name1": {"key1": "value1"}}'
+            ]
+
         with open(CONFIG_FILE, 'w') as file:
-            yaml.dump(default_config, file)
+            yaml.dump(default_config, file, default_flow_style=False)
 
     def load_config_file(self):
         file_dialog = QFileDialog(self)
@@ -133,20 +139,22 @@ class NATSClient(QWidget):
         self.topic_combo.clear()
         self.topic_combo.addItems(self.topics)
         self.message_combo.clear()
-        self.message_combo.addItems(self.messages)
+        self.message_names = [list(json.loads(msg).keys())[0] for msg in self.messages]
+        self.message_combo.addItems(self.message_names)
         self.ssh_input.setText(self.ssh_address)
         self.ssh_user_input.setText(self.ssh_username)
 
     def save_config(self):
+        config = OrderedDict()
+        config['topics'] = self.topics
+        config['messages'] = self.messages
+        config['ssh_address'] = self.ssh_address
+        config['ssh_username'] = self.ssh_username
+        config['nats_path'] = self.nats_path
+        config['get_nats_ip_command'] = self.get_nats_ip_command
+
         with open(self.config_file, 'w') as file:
-            yaml.dump({
-                'topics': self.topics,
-                'messages': self.messages,
-                'ssh_address': self.ssh_address,
-                'ssh_username': self.ssh_username,
-                'nats_path': self.nats_path,
-                'get_nats_ip_command': self.get_nats_ip_command,
-            }, file)
+            yaml.dump(config, file, default_flow_style=False)
 
     def check_add_new_host(self):
         new_host, ok = QInputDialog.getText(self, 'Add New Host', 'Enter new host name:')
@@ -163,11 +171,19 @@ class NATSClient(QWidget):
             self.save_config()
 
     def check_add_new_message(self):
-        new_message, ok = QInputDialog.getText(self, 'Add New Message', 'Enter new message:')
-        if ok and new_message:
-            self.messages.append(new_message)
-            self.message_combo.addItem(new_message)
-            self.save_config()
+        new_message_name, ok = QInputDialog.getText(self, 'Add New Message Name', 'Enter new message name:')
+        if ok and new_message_name:
+            new_message_content, ok = QInputDialog.getText(self, 'Add New Message Content', 'Enter new message content as JSON:')
+            if ok and new_message_content:
+                try:
+                    # Ensure the message content is valid JSON
+                    json.loads(new_message_content)
+                    new_message = json.dumps({new_message_name: json.loads(new_message_content)})
+                    self.messages.append(new_message)
+                    self.message_combo.addItem(new_message_name)
+                    self.save_config()
+                except json.JSONDecodeError:
+                    QMessageBox.warning(self, 'Input Error', 'Invalid JSON content for message.')
 
     def connect_ssh(self):
         ssh_address = self.ssh_input.text()
@@ -191,12 +207,18 @@ class NATSClient(QWidget):
     def send_message(self):
         server = self.server_combo.currentText()
         topic = self.topic_combo.currentText()
-        message = self.message_combo.currentText()
+        message_name  = self.message_combo.currentText()
 
-        if not server or not topic or not message:
+        if not server or not topic or not message_name:
             QMessageBox.warning(self, 'Input Error', 'Please fill in all fields.')
             return
-
+        # Get the actual message based on the selected name
+        for msg in self.messages:
+            msg_dict = json.loads(msg)
+            if message_name in msg_dict:
+                message = json.dumps(msg_dict[message_name])
+                break
+    
         if self.ssh_client:
             asyncio.run(self.publish_message_ssh(server, topic, message))
         else:

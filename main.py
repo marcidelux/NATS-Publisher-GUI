@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, QComboB
 import datetime
 import json
 from collections import OrderedDict
+import subprocess
 
 CONFIG_FILE = 'nats_config.yaml'
 nats_path = ""
@@ -85,6 +86,10 @@ class NATSClient(QWidget):
         self.layout.addWidget(self.topic_label)
         self.layout.addLayout(self.topic_combo_layout)
 
+        self.open_subscription_button = QPushButton('Subscribe to Topic')
+        self.open_subscription_button.clicked.connect(self.open_subscription_window)
+        self.layout.addWidget(self.open_subscription_button)
+        
         self.message_label = QLabel('Message:')
         self.message_combo_layout = QHBoxLayout()
         self.message_combo = QComboBox()
@@ -103,7 +108,7 @@ class NATSClient(QWidget):
         self.log_area.setReadOnly(True)
         self.log_area.setStyleSheet("background-color: lightgrey;")
         self.layout.addWidget(self.log_area)
-
+        
         self.setLayout(self.layout)
 
         if not os.path.exists(CONFIG_FILE):
@@ -243,9 +248,11 @@ class NATSClient(QWidget):
                 break
     
         if self.ssh_client:
-            asyncio.run(self.publish_message_ssh(server, topic, message))
+            asyncio.create_task(self.publish_message_ssh(server, topic, message))
+            #asyncio.run(self.publish_message_ssh(server, topic, message))
         else:
-            asyncio.run(self.publish_message_local(server, topic, message))
+            asyncio.create_task(self.publish_message_local(server, topic, message))
+            #asyncio.run(self.publish_message_local(server, topic, message))
 
     def log_response(self, message):
         self.log_area.append(f'<span style="color: blue;">{message}</span>')
@@ -337,9 +344,30 @@ class NATSClient(QWidget):
         else:
             self.log_response(f'Response: {stdout.decode()}')
             QMessageBox.information(self, 'Success', 'Message sent successfully!')
+    
+    def open_subscription_window(self):
+        ssh_address = self.ssh_input.text()
+        ssh_username = self.ssh_user_input.text()
+        ssh_password = self.ssh_pass_input.text()
+        nats_path = self.nats_path
+        server = self.server_combo.currentText()
+        topic = self.topic_combo.currentText()
+        machine_serial_number = self.machine_serial_combo.currentText()
+
+        subprocess.Popen([
+            sys.executable, 'subscriber.py',
+            ssh_address, ssh_username, ssh_password, nats_path, server, topic, machine_serial_number
+        ])
 
 if __name__ == '__main__':
+    import qasync
+
     app = QApplication(sys.argv)
+    loop = qasync.QEventLoop(app)
+    asyncio.set_event_loop(loop)
+
     client = NATSClient()
     client.show()
-    sys.exit(app.exec())
+
+    with loop:
+        loop.run_forever()

@@ -65,6 +65,16 @@ class NATSClient(QWidget):
         self.layout.addWidget(self.server_label)
         self.layout.addLayout(self.server_combo_layout)
 
+        self.machine_serial_label = QLabel('Machine Serial Number:')
+        self.machine_serial_combo_layout = QHBoxLayout()
+        self.machine_serial_combo = QComboBox()
+        self.add_new_serial_button = QPushButton('Add New')
+        self.add_new_serial_button.clicked.connect(self.check_add_new_serial)
+        self.machine_serial_combo_layout.addWidget(self.machine_serial_combo)
+        self.machine_serial_combo_layout.addWidget(self.add_new_serial_button)
+        self.layout.addWidget(self.machine_serial_label)
+        self.layout.addLayout(self.machine_serial_combo_layout)
+
         self.topic_label = QLabel('Topic:')
         self.topic_combo_layout = QHBoxLayout()
         self.topic_combo = QComboBox()
@@ -109,9 +119,10 @@ class NATSClient(QWidget):
         default_config['get_nats_ip_command'] = 'docker inspect nats | jq -r \'.[0].NetworkSettings.Ports."4222/tcp"[0].HostIp\''
         default_config['hosts'] = ["nats://localhost:8222"]
         default_config['topics'] = ["topic1"]
+        default_config['machine_serial_numbers'] = ["123456789"]
         default_config['messages'] = [
-                '{"message_name1": {"key1": "value1"}}'
-            ]
+            '{"message_name1": {"key1": "value1"}}'
+        ]
 
         with open(CONFIG_FILE, 'w') as file:
             yaml.dump(default_config, file, default_flow_style=False)
@@ -129,6 +140,7 @@ class NATSClient(QWidget):
             self.hosts = config.get('hosts', [])
             self.topics = config.get('topics', [])
             self.messages = config.get('messages', [])
+            self.machine_serial_numbers = config.get('machine_serial_numbers', [])
             self.ssh_address = config.get('ssh_address', '')
             self.ssh_username = config.get('ssh_username', '')
             self.nats_path = config.get('nats_path', '/usr/bin')
@@ -141,13 +153,17 @@ class NATSClient(QWidget):
         self.message_combo.clear()
         self.message_names = [list(json.loads(msg).keys())[0] for msg in self.messages]
         self.message_combo.addItems(self.message_names)
+        self.machine_serial_combo.clear()
+        self.machine_serial_combo.addItems(self.machine_serial_numbers)
         self.ssh_input.setText(self.ssh_address)
         self.ssh_user_input.setText(self.ssh_username)
 
     def save_config(self):
         config = OrderedDict()
+        config['hosts'] = self.hosts
         config['topics'] = self.topics
         config['messages'] = self.messages
+        config['machine_serial_numbers'] = self.machine_serial_numbers
         config['ssh_address'] = self.ssh_address
         config['ssh_username'] = self.ssh_username
         config['nats_path'] = self.nats_path
@@ -161,6 +177,13 @@ class NATSClient(QWidget):
         if ok and new_host:
             self.hosts.append(new_host)
             self.server_combo.addItem(new_host)
+            self.save_config()
+
+    def check_add_new_serial(self):
+        new_serial, ok = QInputDialog.getText(self, 'Add New Serial Number', 'Enter new serial number:')
+        if ok and new_serial:
+            self.machine_serial_numbers.append(new_serial)
+            self.machine_serial_combo.addItem(new_serial)
             self.save_config()
 
     def check_add_new_topic(self):
@@ -275,8 +298,9 @@ class NATSClient(QWidget):
                 nats_path = self.nats_path
 
             message_with_timestamp = self.add_timestamp_to_message(message)
+            machine_serial_number = self.machine_serial_combo.currentText()
             escaped_json_message = message_with_timestamp.replace('"', '\\"')
-            command = f'/bin/bash -c \'{nats_path} pub {topic} "{escaped_json_message}" -s {server}\''
+            command = f'/bin/bash -c \'{nats_path} pub {machine_serial_number}.{topic} "{escaped_json_message}" -s {server}\''
             _, stdout, stderr = self.ssh_client.exec_command(command)
             stdout.channel.recv_exit_status()
             response = stdout.read().decode()
@@ -297,7 +321,8 @@ class NATSClient(QWidget):
 
     async def publish_message_local(self, server, topic, message):
         message_with_timestamp = self.add_timestamp_to_message(message)
-        command = f'nats pub {topic} "{message_with_timestamp}" -s {server}'
+        machine_serial_number = self.machine_serial_combo.currentText()
+        command = f'nats pub {machine_serial_number}.{topic} "{message_with_timestamp}" -s {server}'
         self.log_info(f'Command: {command}')
         process = await asyncio.create_subprocess_shell(
             command,

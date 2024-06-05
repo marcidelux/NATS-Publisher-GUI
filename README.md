@@ -37,6 +37,8 @@ pip install -r requirements.txt
 If it was not created a default file will be created at first startup:
 hosts:
   - "nats://localhost:4222"
+machine_serial_numbers:
+- '123456789'
 topic:
   - "topic1"
 messages:

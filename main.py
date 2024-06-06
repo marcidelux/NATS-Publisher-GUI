@@ -25,6 +25,7 @@ class NATSClient(QWidget):
         self.setGeometry(100, 100, 500, 450)
 
         self.ssh_client = None
+        self.nats_host_ip = ""
 
         self.layout = QVBoxLayout()
 
@@ -52,24 +53,11 @@ class NATSClient(QWidget):
         self.connect_button.clicked.connect(self.connect_ssh)
         self.layout.addWidget(self.connect_button)
 
-        self.get_nats_ip_button = QPushButton('Get NATS IP')
-        self.get_nats_ip_button.clicked.connect(self.get_nats_ip)
-        self.layout.addWidget(self.get_nats_ip_button)
-
-        self.server_label = QLabel('NATS Server Address:')
-        self.server_combo_layout = QHBoxLayout()
-        self.server_combo = QComboBox()
-        self.add_new_host_button = QPushButton('Add New')
-        self.add_new_host_button.clicked.connect(self.check_add_new_host)
-        self.server_combo_layout.addWidget(self.server_combo)
-        self.server_combo_layout.addWidget(self.add_new_host_button)
-        self.layout.addWidget(self.server_label)
-        self.layout.addLayout(self.server_combo_layout)
-
         self.machine_serial_label = QLabel('Machine Serial Number:')
         self.machine_serial_combo_layout = QHBoxLayout()
         self.machine_serial_combo = QComboBox()
         self.add_new_serial_button = QPushButton('Add New')
+        self.add_new_serial_button.setFixedWidth(100)
         self.add_new_serial_button.clicked.connect(self.check_add_new_serial)
         self.machine_serial_combo_layout.addWidget(self.machine_serial_combo)
         self.machine_serial_combo_layout.addWidget(self.add_new_serial_button)
@@ -80,6 +68,7 @@ class NATSClient(QWidget):
         self.topic_combo_layout = QHBoxLayout()
         self.topic_combo = QComboBox()
         self.add_new_topic_button = QPushButton('Add New')
+        self.add_new_topic_button.setFixedWidth(100)
         self.add_new_topic_button.clicked.connect(self.check_add_new_topic)
         self.topic_combo_layout.addWidget(self.topic_combo)
         self.topic_combo_layout.addWidget(self.add_new_topic_button)
@@ -89,11 +78,12 @@ class NATSClient(QWidget):
         self.open_subscription_button = QPushButton('Subscribe to Topic')
         self.open_subscription_button.clicked.connect(self.open_subscription_window)
         self.layout.addWidget(self.open_subscription_button)
-        
+
         self.message_label = QLabel('Message:')
         self.message_combo_layout = QHBoxLayout()
         self.message_combo = QComboBox()
         self.add_new_message_button = QPushButton('Add New')
+        self.add_new_message_button.setFixedWidth(100)
         self.add_new_message_button.clicked.connect(self.check_add_new_message)
         self.message_combo_layout.addWidget(self.message_combo)
         self.message_combo_layout.addWidget(self.add_new_message_button)
@@ -122,7 +112,6 @@ class NATSClient(QWidget):
         default_config['ssh_username'] = 'vagrant'
         default_config['nats_path'] = '/usr/bin'
         default_config['get_nats_ip_command'] = 'docker inspect nats | jq -r \'.[0].NetworkSettings.Ports."4222/tcp"[0].HostIp\''
-        default_config['hosts'] = ["nats://localhost:8222"]
         default_config['topics'] = ["topic1"]
         default_config['machine_serial_numbers'] = ["123456789"]
         default_config['messages'] = [
@@ -142,7 +131,6 @@ class NATSClient(QWidget):
     def load_config(self):
         with open(self.config_file, 'r') as file:
             config = yaml.safe_load(file)
-            self.hosts = config.get('hosts', [])
             self.topics = config.get('topics', [])
             self.messages = config.get('messages', [])
             self.machine_serial_numbers = config.get('machine_serial_numbers', [])
@@ -151,8 +139,6 @@ class NATSClient(QWidget):
             self.nats_path = config.get('nats_path', '/usr/bin')
             self.get_nats_ip_command = config.get('get_nats_ip_command', 'docker inspect nats | jq -r \'.[0].NetworkSettings.Ports."4222/tcp"[0].HostIp\'')
 
-        self.server_combo.clear()
-        self.server_combo.addItems(self.hosts)
         self.topic_combo.clear()
         self.topic_combo.addItems(self.topics)
         self.message_combo.clear()
@@ -165,7 +151,6 @@ class NATSClient(QWidget):
 
     def save_config(self):
         config = OrderedDict()
-        config['hosts'] = self.hosts
         config['topics'] = self.topics
         config['messages'] = self.messages
         config['machine_serial_numbers'] = self.machine_serial_numbers
@@ -176,13 +161,6 @@ class NATSClient(QWidget):
 
         with open(self.config_file, 'w') as file:
             yaml.dump(config, file, default_flow_style=False)
-
-    def check_add_new_host(self):
-        new_host, ok = QInputDialog.getText(self, 'Add New Host', 'Enter new host name:')
-        if ok and new_host:
-            self.hosts.append(new_host)
-            self.server_combo.addItem(new_host)
-            self.save_config()
 
     def check_add_new_serial(self):
         new_serial, ok = QInputDialog.getText(self, 'Add New Serial Number', 'Enter new serial number:')
@@ -228,16 +206,19 @@ class NATSClient(QWidget):
         try:
             self.ssh_client.connect(ssh_address, port=22, username=ssh_username, password=ssh_password)
             self.log_info('SSH connection established successfully!')
+            if self.get_nats_ip():
+                self.connect_button.setStyleSheet("background-color: green; color: black;")
+                self.connect_button.setDisabled(True)
+                self.connect_button.setText(f"CONNECTED TO: {self.ssh_address}-{self.nats_host_ip}")
         except Exception as e:
             self.ssh_client = None
             QMessageBox.critical(self, 'Error', f'Failed to establish SSH connection: {e}')
 
     def send_message(self):
-        server = self.server_combo.currentText()
         topic = self.topic_combo.currentText()
         message_name  = self.message_combo.currentText()
 
-        if not server or not topic or not message_name:
+        if not self.nats_host_ip or not topic or not message_name:
             QMessageBox.warning(self, 'Input Error', 'Please fill in all fields.')
             return
         # Get the actual message based on the selected name
@@ -248,11 +229,9 @@ class NATSClient(QWidget):
                 break
     
         if self.ssh_client:
-            asyncio.create_task(self.publish_message_ssh(server, topic, message))
-            #asyncio.run(self.publish_message_ssh(server, topic, message))
+            asyncio.create_task(self.publish_message_ssh(self.nats_host_ip, topic, message))
         else:
-            asyncio.create_task(self.publish_message_local(server, topic, message))
-            #asyncio.run(self.publish_message_local(server, topic, message))
+            asyncio.create_task(self.publish_message_local(self.nats_host_ip, topic, message))
 
     def log_response(self, message):
         self.log_area.append(f'<span style="color: blue;">{message}</span>')
@@ -285,18 +264,19 @@ class NATSClient(QWidget):
                 if error:
                     self.log_error(f'Error: {error}')
                     QMessageBox.critical(self, 'Error', f'Failed to get NATS IP: {error}')
+                    return False
                 else:
                     self.log_response(f'NATS IP: {response}')
-                    if response and response not in self.hosts:
-                        self.hosts.append(response)
-                        self.server_combo.addItem(response)
-                        self.save_config()
+                    self.nats_host_ip = response
+                    return True
 
             except Exception as e:
                 self.log_error(f'Exception: {e}')
                 QMessageBox.critical(self, 'Error', f'Failed to get NATS IP: {e}')
+                return False
         else:
             QMessageBox.warning(self, 'SSH Error', 'SSH connection not established.')
+            return False
 
     async def publish_message_ssh(self, server, topic, message):
         global nats_path
@@ -350,12 +330,12 @@ class NATSClient(QWidget):
         ssh_username = self.ssh_user_input.text()
         ssh_password = self.ssh_pass_input.text()
         nats_path = self.nats_path
-        server = self.server_combo.currentText()
+        server = self.nats_host_ip
         topic = self.topic_combo.currentText()
         machine_serial_number = self.machine_serial_combo.currentText()
 
         subprocess.Popen([
-            sys.executable, 'subscriber.py',
+            'subscriber.exe',  # Change this to the path where `subscriber.exe` is located if necessary
             ssh_address, ssh_username, ssh_password, nats_path, server, topic, machine_serial_number
         ])
 

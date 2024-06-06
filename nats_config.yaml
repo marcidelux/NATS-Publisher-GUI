@@ -2,8 +2,6 @@ ssh_address: 127.0.0.1
 ssh_username: vagrant
 nats_path: /usr/bin
 get_nats_ip_command: docker inspect nats | jq -r '.[0].NetworkSettings.Ports."4222/tcp"[0].HostIp'
-hosts:
-- nats://localhost:8222
 topics:
 - topic1
 machine_serial_numbers:
